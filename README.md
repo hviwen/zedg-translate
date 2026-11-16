@@ -10,7 +10,7 @@ Zed / ZedG 翻译扩展：hover 气泡中英互译 + LLM 接入 + 翻译记忆�
 | 气泡翻译 | LSP hover 弹窗：光标停留即显示翻译气泡（Zed 原生 hover UI） |
 | LLM 接入 | OpenAI 兼容 `/chat/completions`（默认 DeepSeek），key 配置在 settings.json |
 | 翻译记忆本 | `memory.jsonl` 逐条记录；`stats.md` 生成统计（总量/近 7 天/高频词句） |
-| 词汇本（可选） | 内置高考 3743 / 四级 4544 / 计算机 260 词；气泡内打标签，统计页显示覆盖率 |
+| 词汇本（可选） | 内置高考 3743 / 四级 4544 / 计算机 260 / Ogden 850 词；气泡内打标签，统计页显示覆盖率 |
 
 优先级：**记忆本命中 → 秒回**（不发请求）；**无 key 时词汇本仍可离线翻译**；否则调用 LLM。
 
@@ -49,8 +49,9 @@ Zed / ZedG 翻译扩展：hover 气泡中英互译 + LLM 接入 + 翻译记忆�
 **v. 放弃**　**n. 放任；狂热**
 `高考词汇` `大学英语四级词汇`
 > The plan was abandoned.  计划被放弃了。
-已译 3 次 · ZedG Translate
 ```
+
+默认词本：`gaokao`、`cet4`、`computing`、`ogden`（Ogden 850 基础英语，来自 ogden.munch.love）。
 
 查看统计：打开数据目录下的 `stats.md`：
 

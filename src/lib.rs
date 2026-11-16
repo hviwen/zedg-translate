@@ -18,6 +18,7 @@ const ASSETS: &[(&str, &str)] = &[
         "vocab/computing.json",
         include_str!("../vocab/computing.json"),
     ),
+    ("vocab/ogden.json", include_str!("../vocab/ogden.json")),
 ];
 
 struct ZedgTranslateExtension;

@@ -29,7 +29,7 @@ const path = require("path");
 const API_KEY = process.env.ZEDG_TRANSLATE_API_KEY || "";
 const API_BASE = (process.env.ZEDG_TRANSLATE_API_BASE || "https://api.deepseek.com").replace(/\/+$/, "");
 const MODEL = process.env.ZEDG_TRANSLATE_MODEL || "deepseek-chat";
-const BOOK_NAMES = (process.env.ZEDG_TRANSLATE_BOOKS || "gaokao,cet4,computing")
+const BOOK_NAMES = (process.env.ZEDG_TRANSLATE_BOOKS || "gaokao,cet4,computing,ogden")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
@@ -387,7 +387,7 @@ async function llmTranslate(term, dir) {
 // ---------------------------------------------------------------------------
 // Hover markdown rendering
 
-function renderMarkdown({ term, dir, translation, phonetic, example, vocabHits, memHit, fromVocabOnly }) {
+function renderMarkdown({ term, dir, translation, phonetic, example, vocabHits, fromVocabOnly }) {
   const lines = [];
   const arrow = dir === "zh2en" ? "中 → 英" : "英 → 中";
   const title = `${term}　*\`${arrow}\`*`;
@@ -419,12 +419,6 @@ function renderMarkdown({ term, dir, translation, phonetic, example, vocabHits, 
     lines.push(`> ${example.en}`);
     lines.push(`> ${example.zh}`);
   }
-
-  const footer = [];
-  if (memHit) footer.push(`已译 ${memHit.count} 次`);
-  footer.push("ZedG Translate");
-  lines.push("");
-  lines.push(`<sub>${footer.join(" · ")}</sub>`);
   return lines.join("\n");
 }
 
@@ -462,7 +456,6 @@ async function hoverMarkdown(term, english, lang, uri) {
       phonetic: "",
       example: null,
       vocabHits: vocabLookup(term, english),
-      memHit,
     });
   }
 

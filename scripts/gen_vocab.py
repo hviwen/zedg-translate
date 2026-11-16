@@ -92,3 +92,38 @@ save("大学英语四级词汇", "kajweb/dict (CET4)", prune_empty_trans(cet4), 
 
 tech = load_tech_posts("/tmp/dict/most-frequent-technology-english-words-master")
 save("计算机词汇", "Wei-Xia/most-frequent-technology-english-words (MIT)", prune_empty_trans(tech), "computing.json")
+
+
+def load_ogden():
+    """Fetch ogden.munch.love and extract the embedded 850-word data."""
+    import urllib.request
+
+    html = urllib.request.urlopen("https://ogden.munch.love/", timeout=30).read().decode("utf-8")
+    data = json.loads(re.search(r'<script id="data" type="application/json">(.*?)</script>', html, re.S).group(1))
+    ipa = json.loads(re.search(r'<script id="ipa-data" type="application/json">(.*?)</script>', html, re.S).group(1))
+    cats = {"op": "操作词", "gt": "一般事物", "pt": "可画名词", "qg": "一般性质", "qo": "对立性质"}
+    words = {}
+    for e in data:
+        w = e["w"].strip().lower()
+        zh = e.get("zh", "").strip()
+        if not w or not zh:
+            continue
+        entry = {"trans": [p.strip() for p in re.split(r"[，,;；]", zh) if p.strip()][:3]}
+        if e.get("c"):
+            entry["cat"] = cats.get(e["c"], e["c"])
+        p = ipa.get(w)
+        if isinstance(p, dict):
+            entry["phonetic"] = p.get("us") or p.get("uk") or ""
+        elif isinstance(p, str):
+            entry["phonetic"] = p
+        if w in words:
+            for t in entry["trans"]:
+                if t not in words[w]["trans"]:
+                    words[w]["trans"].append(t)
+            words[w]["trans"] = words[w]["trans"][:3]
+        else:
+            words[w] = entry
+    return words
+
+
+save("Ogden 850 基础英语", "ogden.munch.love", prune_empty_trans(load_ogden()), "ogden.json")
