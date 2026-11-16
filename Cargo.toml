@@ -1,0 +1,15 @@
+[package]
+name = "zedg-translate"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate_type = ["cdylib"]
+
+[dependencies]
+zed_extension_api = "0.7.0"
+
+[profile.release]
+opt-level = "s"
+lto = true

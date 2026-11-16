@@ -1,0 +1,60 @@
+id = "zedg-translate"
+name = "ZedG Translate"
+version = "0.1.0"
+schema_version = 1
+authors = ["ZedG"]
+description = "中英互译 hover 气泡：LLM 翻译、翻译记忆本与词汇本统计"
+repository = "https://github.com/zedg/zedg-translate"
+
+[language_servers.zedg-translate]
+name = "zedg-translate"
+languages = [
+  "Markdown",
+  "Plain Text",
+  "Python",
+  "Rust",
+  "Go",
+  "TypeScript",
+  "TSX",
+  "JavaScript",
+  "JSON",
+  "JSONC",
+  "YAML",
+  "TOML",
+  "Java",
+  "Kotlin",
+  "Swift",
+  "C",
+  "C++",
+  "C#",
+  "Ruby",
+  "PHP",
+  "Shell Script",
+  "SQL",
+  "HTML",
+  "CSS",
+  "SCSS",
+  "LESS",
+  "Vue.js",
+  "Svelte",
+  "Lua",
+  "Dockerfile",
+  "Make",
+  "XML",
+  "Org",
+  "Dart",
+  "Elixir",
+  "Erlang",
+  "Haskell",
+  "Scala",
+  "Perl",
+  "R",
+  "Zig",
+  "Astro",
+  "ERB",
+  "Jinja2",
+  "HEEx",
+]
+
+[language_servers.zedg-translate.language_ids]
+"Plain Text" = "plaintext"
