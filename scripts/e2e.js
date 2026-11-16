@@ -166,6 +166,25 @@ async function main() {
   console.log(r2.result && r2.result.contents ? r2.result.contents.value : "(no hover)");
 
   // 'result' is in computing.json? maybe not; use a word from cet4: 'abandon' / 'curiosity'? curiosity in cet4?
+  // 5. ZedG fork mode: selection-driven hover
+  notify("zedg/selectionChanged", { uri: PY_DOC, text: "abandon the plan" });
+  await sleep(100);
+  r = await request("textDocument/hover", {
+    textDocument: { uri: PY_DOC },
+    position: { line: 1, character: 12 },
+  });
+  console.log("\n== fork mode: hover with selection 'abandon the plan' ==");
+  console.log(r.result && r.result.contents ? r.result.contents.value : "(no hover)");
+
+  notify("zedg/selectionChanged", { uri: PY_DOC, text: null });
+  await sleep(100);
+  r = await request("textDocument/hover", {
+    textDocument: { uri: PY_DOC },
+    position: { line: 1, character: 12 },
+  });
+  console.log("\n== fork mode: hover without selection ==");
+  console.log(r.result === null ? "null (correct: no bubble)" : JSON.stringify(r.result));
+
   server2.kill();
   llm.close();
   server.kill();

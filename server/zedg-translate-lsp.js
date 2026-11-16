@@ -61,6 +61,11 @@ for (const name of BOOK_NAMES) {
 // ---------------------------------------------------------------------------
 // Translation memory
 
+/** ZedG fork: uri -> selected text (from `zedg/selectionChanged`). */
+const selections = new Map();
+/** Becomes true after the first `zedg/selectionChanged` (i.e. patched ZedG). */
+let zedgForkMode = false;
+
 /** key: `${dir}|${term.toLowerCase()}` -> { dst, count, lastTs } */
 const memory = new Map();
 let memoryLoaded = false;
@@ -494,6 +499,18 @@ async function hoverMarkdown(term, english, lang, uri) {
 }
 
 function handleHover(params) {
+  // ZedG fork mode: only translate when the editor reports an active
+  // selection covering the hover position; translate the full selection.
+  if (zedgForkMode) {
+    const selected = (selections.get(params.textDocument.uri) || "").trim();
+    if (!selected || selected.length > 2000) {
+      return Promise.resolve(null);
+    }
+    const singleWord = /^[\w'-]+$/.test(selected);
+    return hoverMarkdown(selected, singleWord && !hasCJK(selected), "", params.textDocument.uri)
+      .then((markdown) => (markdown ? { contents: { kind: "markdown", value: markdown } } : null));
+  }
+
   const doc = docs.get(params.textDocument.uri);
   if (!doc) return Promise.resolve(null);
   const { character, line } = params.position;
@@ -635,6 +652,15 @@ function dispatch(msg) {
     }
     case "textDocument/didClose":
       docs.delete(params.textDocument.uri);
+      break;
+    case "zedg/selectionChanged":
+      // ZedG fork: selection state delivered before each hover request.
+      zedgForkMode = true;
+      if (params && params.text && String(params.text).trim()) {
+        selections.set(params.uri, String(params.text));
+      } else {
+        selections.delete(params.uri);
+      }
       break;
     case "textDocument/hover":
       handleHover(params)
