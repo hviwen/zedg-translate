@@ -1,0 +1,131 @@
+--- a/crates/project/src/lsp_command.rs
++++ b/crates/project/src/lsp_command.rs
+@@ -229,6 +229,23 @@
+     pub position: PointUtf16,
+ }
+ 
++/// ZedG: params for `zedg/selectionChanged`, sent to zedg-translate language
++/// servers before each hover request so translation bubbles can be gated on
++/// real selections and cover the full selected text.
++#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
++pub struct ZedgSelectionParams {
++    pub uri: String,
++    /// Selected text, or `None` when no selection covers the hover position.
++    pub text: Option<String>,
++}
++
++pub struct ZedgSelectionChanged;
++
++impl lsp::notification::Notification for ZedgSelectionChanged {
++    type Params = ZedgSelectionParams;
++    const METHOD: &'static str = "zedg/selectionChanged";
++}
++
+ #[derive(Debug)]
+ pub(crate) struct GetCompletions {
+     pub position: PointUtf16,
+--- a/crates/project/src/lsp_store.rs
++++ b/crates/project/src/lsp_store.rs
+@@ -9302,6 +9302,44 @@
+         }
+     }
+ 
++    /// ZedG: tell every `zedg-translate` language server for this buffer about
++    /// the selection state, so translation bubbles only appear for selections.
++    /// Sent immediately before each hover request (FIFO over the same channel).
++    pub fn notify_zedg_selection(
++        &mut self,
++        buffer: &Entity<Buffer>,
++        selection: Option<String>,
++        cx: &mut Context<Self>,
++    ) {
++        let Some(local) = self.as_local() else {
++            return;
++        };
++        let servers = buffer.update(cx, |buffer, cx| {
++            local
++                .language_servers_for_buffer(buffer, cx)
++                .filter(|(adapter, _)| <_ as AsRef<str>>::as_ref(&adapter.name) == "zedg-translate")
++                .map(|(_, server)| server.clone())
++                .collect::<Vec<_>>()
++        });
++        if servers.is_empty() {
++            return;
++        }
++        let Some(file) = File::from_dyn(buffer.read(cx).file()).and_then(File::as_local) else {
++            return;
++        };
++        let Ok(uri) = crate::lsp_command::make_text_document_identifier(&file.abs_path(cx)) else {
++            return;
++        };
++        for server in servers {
++            let _ = server.notify::<crate::lsp_command::ZedgSelectionChanged>(
++                crate::lsp_command::ZedgSelectionParams {
++                    uri: uri.uri.to_string(),
++                    text: selection.clone(),
++                },
++            );
++        }
++    }
++
+     pub fn hover(
+         &mut self,
+         buffer: &Entity<Buffer>,
+--- a/crates/project/src/project.rs
++++ b/crates/project/src/project.rs
+@@ -4714,6 +4714,19 @@
+         })
+     }
+ 
++    /// ZedG: forward the selection state to zedg-translate language servers
++    /// (see `LspStore::notify_zedg_selection`).
++    pub fn notify_zedg_selection(
++        &self,
++        buffer: &Entity<Buffer>,
++        selection: Option<String>,
++        cx: &mut Context<Self>,
++    ) {
++        self.lsp_store.update(cx, |lsp_store, cx| {
++            lsp_store.notify_zedg_selection(buffer, selection, cx)
++        })
++    }
++
+     pub fn hover<T: ToPointUtf16>(
+         &self,
+         buffer: &Entity<Buffer>,
+--- a/crates/editor/src/hover_popover.rs
++++ b/crates/editor/src/hover_popover.rs
+@@ -301,6 +301,33 @@
+                 total_delay
+             };
+ 
++            // ZedG: when the hover position lies inside an active selection,
++            // hand the selected text to zedg-translate servers so they show a
++            // bubble; otherwise tell them no selection (no bubble).
++            if let Some(project) = this.update(cx, |editor, _| editor.project.clone())? {
++                let zedg_selection = this.update(cx, |editor, cx| {
++                    let buffer_snapshot = snapshot.buffer_snapshot();
++                    let hover_offset = anchor.to_offset(buffer_snapshot);
++                    let selection = editor.selections.newest_anchor();
++                    let start = selection.start.to_offset(buffer_snapshot);
++                    let end = selection.end.to_offset(buffer_snapshot);
++                    if start < end && start <= hover_offset && hover_offset <= end {
++                        Some(
++                            buffer_snapshot
++                                .text_for_range(start..end)
++                                .collect::<String>(),
++                        )
++                    } else {
++                        None
++                    }
++                })?;
++                cx.update(|_, cx| {
++                    project.update(cx, |project, cx| {
++                        project.notify_zedg_selection(&buffer, zedg_selection, cx)
++                    })
++                })?;
++            }
++
+             let mut hover_request =
+                 cx.update(|_, cx| provider.hover(&buffer, buffer_position, cx))?;
+             let debugger_request =
