@@ -35,11 +35,12 @@ const BOOK_NAMES = (process.env.HOVER_TRANSLATE_BOOKS || "gaokao,cet4,computing,
   .map((s) => s.trim())
   .filter(Boolean);
 // Translation memory lives inside the extension's working directory, which is
-// the only location Zed designates for extension state. Users who want the
-// memory to survive extension updates can point `data_dir` at their own
-// directory in settings.json.
+// the only location Zed designates for extension state. Keep it next to (not
+// inside) the downloaded server directory so re-downloading the server never
+// deletes the memory. Users who want the memory to survive extension updates
+// can point `data_dir` at their own directory in settings.json.
 const DATA_DIR =
-  process.env.HOVER_TRANSLATE_DATA_DIR || path.join(__dirname, "data");
+  process.env.HOVER_TRANSLATE_DATA_DIR || path.join(__dirname, "..", "data");
 const MEMORY_PATH = path.join(DATA_DIR, "memory.jsonl");
 const STATS_PATH = path.join(DATA_DIR, "stats.md");
 
