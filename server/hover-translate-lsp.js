@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * zedg-translate LSP server (hover-translation bubble for Zed).
+ * hover-translate LSP server (hover-translation bubble for Zed).
  *
  * Protocol surface: initialize / initialized / shutdown / exit,
  * textDocument didOpen|didChange(full)|didClose, textDocument/hover.
@@ -10,37 +10,41 @@
  *   2. Auto-detect direction: CJK present -> zh->en, else en->zh.
  *   3. Answer instantly from the translation memory when the term was
  *      translated before; otherwise call the LLM (OpenAI-compatible
- *      /chat/completions), falling back to bundled vocab books offline.
+ *      /chat/completions), falling back to the offline vocab books.
  *   4. Append the record to memory.jsonl and regenerate stats.md.
  *
- * All configuration arrives via ZEDG_TRANSLATE_* environment variables set
- * by the extension from settings.json (`lsp.zedg-translate.settings`).
+ * The server is started by the extension, which downloads it into the
+ * extension's working directory. Configuration arrives via
+ * HOVER_TRANSLATE_* environment variables set by the extension from
+ * settings.json (`lsp.hover-translate-lsp.settings`).
  */
 
 "use strict";
 
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 
 // ---------------------------------------------------------------------------
 // Configuration
 
-const API_KEY = process.env.ZEDG_TRANSLATE_API_KEY || "";
-const API_BASE = (process.env.ZEDG_TRANSLATE_API_BASE || "https://api.deepseek.com").replace(/\/+$/, "");
-const MODEL = process.env.ZEDG_TRANSLATE_MODEL || "deepseek-chat";
-const BOOK_NAMES = (process.env.ZEDG_TRANSLATE_BOOKS || "gaokao,cet4,computing,ogden")
+const API_KEY = process.env.HOVER_TRANSLATE_API_KEY || "";
+const API_BASE = (process.env.HOVER_TRANSLATE_API_BASE || "https://api.deepseek.com").replace(/\/+$/, "");
+const MODEL = process.env.HOVER_TRANSLATE_MODEL || "deepseek-chat";
+const BOOK_NAMES = (process.env.HOVER_TRANSLATE_BOOKS || "gaokao,cet4,computing,ogden")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+// Translation memory lives inside the extension's working directory, which is
+// the only location Zed designates for extension state. Users who want the
+// memory to survive extension updates can point `data_dir` at their own
+// directory in settings.json.
 const DATA_DIR =
-  process.env.ZEDG_TRANSLATE_DATA_DIR ||
-  path.join(os.homedir(), "Library", "Application Support", "Zed", "zedg-translate");
+  process.env.HOVER_TRANSLATE_DATA_DIR || path.join(__dirname, "data");
 const MEMORY_PATH = path.join(DATA_DIR, "memory.jsonl");
 const STATS_PATH = path.join(DATA_DIR, "stats.md");
 
 function log(...args) {
-  console.error("[zedg-translate]", ...args);
+  console.error("[hover-translate]", ...args);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +138,7 @@ function record(src, dst, dir, lang, uri, bookTags) {
 }
 
 // ---------------------------------------------------------------------------
-// Stats (翻译本/记忆本 统计)
+// Stats (translation memory summary)
 
 let statsScheduled = false;
 function scheduleStats() {
@@ -182,24 +186,24 @@ function writeStats() {
   }
 
   const lines = [];
-  lines.push("# ZedG Translate 翻译统计");
+  lines.push("# Hover Translate Statistics");
   lines.push("");
-  lines.push(`生成时间：${new Date().toLocaleString("zh-CN")}  `);
-  lines.push(`记忆文件：${MEMORY_PATH}`);
+  lines.push(`Generated: ${new Date().toISOString()}  `);
+  lines.push(`Memory file: ${MEMORY_PATH}`);
   lines.push("");
-  lines.push("## 概览");
+  lines.push("## Overview");
   lines.push("");
-  lines.push("| 指标 | 数值 |");
+  lines.push("| Metric | Value |");
   lines.push("|---|---|");
-  lines.push(`| 累计翻译 | ${total} 次 |`);
-  lines.push(`| 唯一词句 | ${byTerm.size} 个 |`);
-  lines.push(`| 今日 | ${byDay.get(today) || 0} 次 |`);
-  lines.push(`| 涉及文件 | ${files.size} 个 |`);
+  lines.push(`| Translations | ${total} |`);
+  lines.push(`| Unique terms | ${byTerm.size} |`);
+  lines.push(`| Today | ${byDay.get(today) || 0} |`);
+  lines.push(`| Files | ${files.size} |`);
   lines.push("");
 
-  lines.push("## 最近 7 天");
+  lines.push("## Last 7 days");
   lines.push("");
-  lines.push("| 日期 | 次数 |");
+  lines.push("| Date | Count |");
   lines.push("|---|---|");
   for (let i = 6; i >= 0; i--) {
     const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
@@ -207,9 +211,9 @@ function writeStats() {
   }
   lines.push("");
 
-  lines.push("## 高频词句 Top 20");
+  lines.push("## Top 20 terms");
   lines.push("");
-  lines.push("| 词句 | 次数 | 最近译文 |");
+  lines.push("| Term | Count | Latest translation |");
   lines.push("|---|---|---|");
   const top = [...byTerm.values()].sort((a, b) => b.count - a.count).slice(0, 20);
   for (const t of top) {
@@ -218,9 +222,9 @@ function writeStats() {
   if (!top.length) lines.push("| - | - | - |");
   lines.push("");
 
-  lines.push("## 词汇本覆盖（翻译范围）");
+  lines.push("## Vocabulary coverage");
   lines.push("");
-  lines.push("| 词汇本 | 总词数 | 已翻译 | 覆盖率 |");
+  lines.push("| Book | Words | Translated | Coverage |");
   lines.push("|---|---|---|---|");
   for (const book of books) {
     const ids = new Set(Object.keys(book.words).map((w) => w.toLowerCase()));
@@ -377,7 +381,7 @@ async function llmTranslate(term, dir) {
   const content = data.choices?.[0]?.message?.content;
   const parsed = parseLlmJson(content);
   if (!parsed || !Array.isArray(parsed.translations)) {
-    throw new Error("LLM 返回无法解析");
+    throw new Error("Unable to parse the LLM response");
   }
   return {
     translations: parsed.translations
@@ -394,7 +398,7 @@ async function llmTranslate(term, dir) {
 
 function renderMarkdown({ term, dir, translation, phonetic, example, vocabHits, fromVocabOnly }) {
   const lines = [];
-  const arrow = dir === "zh2en" ? "中 → 英" : "英 → 中";
+  const arrow = dir === "zh2en" ? "ZH → EN" : "EN → ZH";
   const title = `${term}　*\`${arrow}\`*`;
   lines.push(`### ${title}`);
 
@@ -429,16 +433,16 @@ function renderMarkdown({ term, dir, translation, phonetic, example, vocabHits, 
 
 function configErrorMarkdown(term, dir) {
   return [
-    `### ${term}　*\`${dir === "zh2en" ? "中 → 英" : "英 → 中"}\`*`,
+    `### ${term}　*\`${dir === "zh2en" ? "ZH → EN" : "EN → ZH"}\`*`,
     "",
-    "⚠️ 未配置 LLM API Key，且记忆本/词汇本中无此词。",
+    "⚠️ No LLM API key configured, and this term is not in the translation memory or vocabulary books.",
     "",
-    "在 `settings.json` 中添加：",
+    "Add one in `settings.json`:",
     "",
     "```json",
     '"lsp": {',
-    '  "zedg-translate": {',
-    '    "settings": { "api_key": "sk-你的DeepSeek密钥" }',
+    '  "hover-translate-lsp": {',
+    '    "settings": { "api_key": "sk-your-api-key" }',
     "  }",
     "}",
     "```",
@@ -538,7 +542,7 @@ function handleHover(params) {
             fromVocabOnly: true,
           });
         }
-        return `⚠️ 翻译失败：${e.message}`;
+        return `⚠️ Translation failed: ${e.message}`;
       })
       .finally(() => inflight.delete(key));
     inflight.set(key, p);
@@ -618,7 +622,7 @@ function dispatch(msg) {
           hoverProvider: true,
           textDocumentSync: { openClose: true, change: 1 },
         },
-        serverInfo: { name: "zedg-translate", version: "0.1.0" },
+        serverInfo: { name: "hover-translate-lsp", version: "0.1.0" },
       });
       break;
     case "initialized":

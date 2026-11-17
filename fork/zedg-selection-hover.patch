@@ -4,7 +4,7 @@
      pub position: PointUtf16,
  }
  
-+/// ZedG: params for `zedg/selectionChanged`, sent to zedg-translate language
++/// ZedG: params for `zedg/selectionChanged`, sent to hover-translate language
 +/// servers before each hover request so translation bubbles can be gated on
 +/// real selections and cover the full selected text.
 +#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -30,7 +30,7 @@
          }
      }
  
-+    /// ZedG: tell every `zedg-translate` language server for this buffer about
++    /// ZedG: tell every `hover-translate-lsp` language server for this buffer about
 +    /// the selection state, so translation bubbles only appear for selections.
 +    /// Sent immediately before each hover request (FIFO over the same channel).
 +    pub fn notify_zedg_selection(
@@ -45,7 +45,7 @@
 +        let servers = buffer.update(cx, |buffer, cx| {
 +            local
 +                .language_servers_for_buffer(buffer, cx)
-+                .filter(|(adapter, _)| <_ as AsRef<str>>::as_ref(&adapter.name) == "zedg-translate")
++                .filter(|(adapter, _)| <_ as AsRef<str>>::as_ref(&adapter.name) == "hover-translate-lsp")
 +                .map(|(_, server)| server.clone())
 +                .collect::<Vec<_>>()
 +        });
@@ -77,7 +77,7 @@
          })
      }
  
-+    /// ZedG: forward the selection state to zedg-translate language servers
++    /// ZedG: forward the selection state to hover-translate language servers
 +    /// (see `LspStore::notify_zedg_selection`).
 +    pub fn notify_zedg_selection(
 +        &self,
@@ -100,7 +100,7 @@
              };
  
 +            // ZedG: when the hover position lies inside an active selection,
-+            // hand the selected text to zedg-translate servers so they show a
++            // hand the selected text to hover-translate servers so they show a
 +            // bubble; otherwise tell them no selection (no bubble).
 +            if let Some(project) = this.update(cx, |editor, _| editor.project.clone())? {
 +                let zedg_selection = this.update(cx, |editor, cx| {

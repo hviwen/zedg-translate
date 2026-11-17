@@ -2,44 +2,59 @@ use std::{env, fs};
 use zed_extension_api::settings::LspSettings;
 use zed_extension_api::{self as zed, LanguageServerId, Worktree};
 
-const SERVER_ID: &str = "zedg-translate";
-const SERVER_SCRIPT: &str = "zedg-translate-lsp.js";
+/// Language server ID; also the key used in `lsp.<id>.settings`.
+const SERVER_ID: &str = "hover-translate-lsp";
+/// Directory (inside the extension work dir) that holds the downloaded server.
+const SERVER_DIR: &str = "lsp";
+const SERVER_SCRIPT: &str = "hover-translate-lsp.js";
+/// Must match the version in `extension.toml`/`Cargo.toml`; the release asset
+/// is uploaded under the `v<version>` tag.
+const SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
+const RELEASE_BASE: &str = "https://github.com/hviwen/zedg-translate/releases/download";
 
-/// Files written into the extension's working directory on startup.
-/// The JS server reads vocab files relative to its own path.
-const ASSETS: &[(&str, &str)] = &[
-    (
-        SERVER_SCRIPT,
-        include_str!("../server/zedg-translate-lsp.js"),
-    ),
-    ("vocab/gaokao.json", include_str!("../vocab/gaokao.json")),
-    ("vocab/cet4.json", include_str!("../vocab/cet4.json")),
-    (
-        "vocab/computing.json",
-        include_str!("../vocab/computing.json"),
-    ),
-    ("vocab/ogden.json", include_str!("../vocab/ogden.json")),
-];
+struct HoverTranslateExtension;
 
-struct ZedgTranslateExtension;
+/// Download the language server release zip into the extension work directory.
+///
+/// The registry does not allow bundling a language server inside the extension
+/// binary, so the JS server and its vocabulary books are fetched from GitHub
+/// releases on first use and cached by version.
+fn ensure_server() -> zed::Result<()> {
+    let cwd = env::current_dir().map_err(|e| format!("extension working directory: {e}"))?;
+    let dir = cwd.join(SERVER_DIR);
+    let marker = dir.join(".version");
 
-/// Write embedded assets when missing or stale.
-fn ensure_assets() -> zed::Result<()> {
-    let cwd = env::current_dir().expect("extension working directory");
-    for (rel, content) in ASSETS {
-        let path = cwd.join(rel);
-        let stale = match fs::read_to_string(&path) {
-            Ok(existing) => existing != *content,
-            Err(_) => true,
-        };
-        if stale {
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| format!("create dir {}: {e}", parent.display()))?;
-            }
-            fs::write(&path, content).map_err(|e| format!("write {}: {e}", path.display()))?;
-        }
+    let up_to_date = fs::read_to_string(&marker)
+        .map(|v| v.trim() == SERVER_VERSION)
+        .unwrap_or(false);
+    if up_to_date {
+        return Ok(());
     }
+
+    // Remove a previous download so the archive cannot leave stale files behind.
+    if dir.exists() {
+        fs::remove_dir_all(&dir)
+            .map_err(|e| format!("remove {}: {e}", dir.display()))?;
+    }
+    fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
+
+    let url = format!("{RELEASE_BASE}/v{SERVER_VERSION}/hover-translate-lsp.zip");
+    zed::download_file(&url, SERVER_DIR, zed::DownloadedFileType::Zip).map_err(|e| {
+        format!(
+            "failed to download the language server from {url}: {e}. \
+             Check your network connection and restart the language server."
+        )
+    })?;
+
+    let script = dir.join(SERVER_SCRIPT);
+    if !script.exists() {
+        return Err(format!(
+            "the downloaded archive did not contain {}",
+            script.display()
+        ));
+    }
+
+    fs::write(&marker, SERVER_VERSION).map_err(|e| format!("write {}: {e}", marker.display()))?;
     Ok(())
 }
 
@@ -59,7 +74,7 @@ fn setting_list(settings: &Option<zed::serde_json::Value>, key: &str) -> Option<
     )
 }
 
-impl zed::Extension for ZedgTranslateExtension {
+impl zed::Extension for HoverTranslateExtension {
     fn new() -> Self {
         Self
     }
@@ -69,12 +84,12 @@ impl zed::Extension for ZedgTranslateExtension {
         _language_server_id: &LanguageServerId,
         worktree: &Worktree,
     ) -> zed::Result<zed::Command> {
-        ensure_assets()?;
+        ensure_server()?;
 
         let lsp = LspSettings::for_worktree(SERVER_ID, worktree)?;
 
-        // Allow users to override the binary entirely via
-        // `"lsp": { "zedg-translate": { "binary": { "path": ..., "arguments": [...] } } }`.
+        // Allow users to override the server entirely via
+        // `"lsp": { "hover-translate-lsp": { "binary": { "path": ..., "arguments": [...] } } }`.
         if let Some(binary) = lsp.binary {
             if let Some(path) = binary.path {
                 return Ok(zed::Command {
@@ -86,21 +101,22 @@ impl zed::Extension for ZedgTranslateExtension {
         }
 
         let script = env::current_dir()
-            .unwrap()
+            .map_err(|e| format!("extension working directory: {e}"))?
+            .join(SERVER_DIR)
             .join(SERVER_SCRIPT)
             .to_string_lossy()
             .to_string();
 
         // Configuration comes from settings.json:
-        // "lsp": { "zedg-translate": { "settings": { "api_key": "...", ... } } }
+        // "lsp": { "hover-translate-lsp": { "settings": { "api_key": "...", ... } } }
         // It is passed to the server through the environment so the server
         // needs no configuration-protocol support.
         let mut env = Vec::new();
         let settings = lsp.settings;
         let pairs: &[(&str, &str)] = &[
-            ("ZEDG_TRANSLATE_API_KEY", "api_key"),
-            ("ZEDG_TRANSLATE_API_BASE", "api_base"),
-            ("ZEDG_TRANSLATE_MODEL", "model"),
+            ("HOVER_TRANSLATE_API_KEY", "api_key"),
+            ("HOVER_TRANSLATE_API_BASE", "api_base"),
+            ("HOVER_TRANSLATE_MODEL", "model"),
         ];
         for (env_key, setting_key) in pairs {
             if let Some(value) = setting_str(&settings, setting_key) {
@@ -108,12 +124,12 @@ impl zed::Extension for ZedgTranslateExtension {
             }
         }
         if let Some(books) = setting_list(&settings, "books") {
-            env.push(("ZEDG_TRANSLATE_BOOKS".to_string(), books.join(",")));
+            env.push(("HOVER_TRANSLATE_BOOKS".to_string(), books.join(",")));
         }
-        // Data directory for the translation memory; defaults are resolved
-        // inside the server script, but an explicit override wins.
+        // Data directory for the translation memory. Defaults to the extension
+        // work dir inside the server; an explicit override wins.
         if let Some(dir) = setting_str(&settings, "data_dir") {
-            env.push(("ZEDG_TRANSLATE_DATA_DIR".to_string(), dir));
+            env.push(("HOVER_TRANSLATE_DATA_DIR".to_string(), dir));
         }
 
         Ok(zed::Command {
@@ -124,4 +140,4 @@ impl zed::Extension for ZedgTranslateExtension {
     }
 }
 
-zed::register_extension!(ZedgTranslateExtension);
+zed::register_extension!(HoverTranslateExtension);

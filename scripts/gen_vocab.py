@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build compact vocab JSON files for the zedg-translate extension.
+"""Build compact vocab JSON files for the hover-translate extension.
 
 Sources:
 - GaoZhong_2.json / GaoZhong_3.json (kajweb/dict, 高中/高考3500词, NDJSON)
@@ -11,7 +11,7 @@ Output shape:
 """
 import json, re, os, glob
 
-OUT = os.path.expanduser("~/hankins/zedg-translate/vocab")
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "vocab")
 
 
 def load_ndjson(paths):
@@ -85,13 +85,13 @@ def save(name, source, words, out_name):
 
 
 gaokao = load_ndjson(["/tmp/dict/GaoZhong_2.json", "/tmp/dict/GaoZhong_3.json"])
-save("高考词汇", "kajweb/dict (GaoZhong)", prune_empty_trans(gaokao), "gaokao.json")
+save("Gaokao", "kajweb/dict (GaoZhong)", prune_empty_trans(gaokao), "gaokao.json")
 
 cet4 = load_ndjson(["/tmp/dict/CET4_1.json", "/tmp/dict/CET4_2.json", "/tmp/dict/CET4_3.json"])
-save("大学英语四级词汇", "kajweb/dict (CET4)", prune_empty_trans(cet4), "cet4.json")
+save("CET-4", "kajweb/dict (CET4)", prune_empty_trans(cet4), "cet4.json")
 
 tech = load_tech_posts("/tmp/dict/most-frequent-technology-english-words-master")
-save("计算机词汇", "Wei-Xia/most-frequent-technology-english-words (MIT)", prune_empty_trans(tech), "computing.json")
+save("Computing", "Wei-Xia/most-frequent-technology-english-words (MIT)", prune_empty_trans(tech), "computing.json")
 
 
 def load_ogden():
@@ -126,4 +126,4 @@ def load_ogden():
     return words
 
 
-save("Ogden 850 基础英语", "ogden.munch.love", prune_empty_trans(load_ogden()), "ogden.json")
+save("Ogden 850", "ogden.munch.love", prune_empty_trans(load_ogden()), "ogden.json")

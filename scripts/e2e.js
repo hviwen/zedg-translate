@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** E2E: mock LLM + drive the zedg-translate LSP server over stdio. */
+/** E2E: mock LLM + drive the hover-translate LSP server over stdio. */
 "use strict";
 const { spawn } = require("child_process");
 const http = require("http");
@@ -10,7 +10,7 @@ const TEST_DIR = "/tmp/zedg-test/server";
 const DATA_DIR = "/tmp/zedg-test/data";
 fs.rmSync("/tmp/zedg-test", { recursive: true, force: true });
 fs.mkdirSync(TEST_DIR, { recursive: true });
-fs.copyFileSync(path.join(__dirname, "../server/zedg-translate-lsp.js"), path.join(TEST_DIR, "zedg-translate-lsp.js"));
+fs.copyFileSync(path.join(__dirname, "../server/hover-translate-lsp.js"), path.join(TEST_DIR, "hover-translate-lsp.js"));
 fs.cpSync(path.join(__dirname, "../vocab"), path.join(TEST_DIR, "vocab"), { recursive: true });
 
 // --- mock LLM -------------------------------------------------------------
@@ -36,13 +36,13 @@ function frame(msg) {
   return Buffer.concat([Buffer.from(`Content-Length: ${body.length}\r\n\r\n`, "ascii"), body]);
 }
 
-const server = spawn(process.execPath, [path.join(TEST_DIR, "zedg-translate-lsp.js")], {
+const server = spawn(process.execPath, [path.join(TEST_DIR, "hover-translate-lsp.js")], {
   env: {
     ...process.env,
-    ZEDG_TRANSLATE_API_KEY: "test-key",
-    ZEDG_TRANSLATE_API_BASE: "http://127.0.0.1:9876",
-    ZEDG_TRANSLATE_MODEL: "mock-model",
-    ZEDG_TRANSLATE_DATA_DIR: DATA_DIR,
+    HOVER_TRANSLATE_API_KEY: "test-key",
+    HOVER_TRANSLATE_API_BASE: "http://127.0.0.1:9876",
+    HOVER_TRANSLATE_MODEL: "mock-model",
+    HOVER_TRANSLATE_DATA_DIR: DATA_DIR,
   },
 });
 let buf = Buffer.alloc(0);
@@ -119,8 +119,8 @@ async function main() {
   console.log(r.result.contents.value);
 
   // 4. vocab-only path: no API key
-  const server2 = spawn(process.execPath, [path.join(TEST_DIR, "zedg-translate-lsp.js")], {
-    env: { ...process.env, ZEDG_TRANSLATE_DATA_DIR: DATA_DIR }, // no key
+  const server2 = spawn(process.execPath, [path.join(TEST_DIR, "hover-translate-lsp.js")], {
+    env: { ...process.env, HOVER_TRANSLATE_DATA_DIR: DATA_DIR }, // no key
   });
   server2.stderr.on("data", (d) => process.stderr.write(`[srv2] ${d}`));
   let b2 = Buffer.alloc(0);

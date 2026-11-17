@@ -1,35 +1,44 @@
-# ZedG fork 改动：选中后才弹翻译气泡
+# ZedG fork patch: selection-gated translation bubbles
 
-`zedg-selection-hover.patch` 可直接 `git apply` 到 ZedG v1.28.1 源码包
-（`zedg-zh-cn-source-v1.28.1.tar.gz`，已含汉化补丁）。
+`zedg-selection-hover.patch` applies cleanly to the ZedG v1.28.1 source tree
+(`zedg-zh-cn-source-v1.28.1.tar.gz`, which already includes the Chinese
+localization patch).
 
-## 改动内容
+## What it changes
 
-| 文件 | 改动 |
+| File | Change |
 |---|---|
-| `crates/editor/src/hover_popover.rs` | `show_hover` 时判断 hover 位置是否在非空选区内，把选中文本（或空）经 `zedg/selectionChanged` 通知发给 zedg-translate server，随后才发 hover 请求 |
-| `crates/project/src/project.rs` | 新增 `Project::notify_zedg_selection` |
-| `crates/project/src/lsp_store.rs` | 新增 `LspStore::notify_zedg_selection`：找到 buffer 的 zedg-translate server，FIFO 发送通知 |
-| `crates/project/src/lsp_command.rs` | 定义 `zedg/selectionChanged` 通知（uri + text） |
+| `crates/editor/src/hover_popover.rs` | On `show_hover`, check whether the hover position lies inside a non-empty selection and send the selected text (or nothing) to the `hover-translate-lsp` server via `zedg/selectionChanged`, before the hover request |
+| `crates/project/src/project.rs` | Adds `Project::notify_zedg_selection` |
+| `crates/project/src/lsp_store.rs` | Adds `LspStore::notify_zedg_selection`, which locates the buffer's `hover-translate-lsp` server and sends a FIFO notification |
+| `crates/project/src/lsp_command.rs` | Defines the `zedg/selectionChanged` notification (uri + text) |
 
-## 行为
+## Behavior
 
-- 选中文本（拖选/双击）→ 鼠标停在该选区内 → 气泡翻译**整段选中文本**
-- 无选区 / hover 在选区外 → server 收到空通知 → 不弹气泡
-- 旧环境（未打补丁的 Zed）不会发该通知 → 扩展自动退回逐词 hover 模式
+- Text selected (drag or double-click) and the pointer hovers inside the
+  selection → the bubble translates the whole selected text.
+- No selection, or hovering outside it → the server receives an empty
+  notification and shows nothing.
+- Hosts without this patch never send the notification, so the extension falls
+  back to per-word hover automatically.
 
-## 应用与构建
+## Applying and building
 
 ```sh
-# 1. 解压源码包并打补丁
+# 1. Unpack the source tarball and apply the patch
 tar -xzf zedg-zh-cn-source-v1.28.1.tar.gz zed-src && cd zed-src
 git apply /path/to/zedg-selection-hover.patch
 
-# 2. 构建（rust-toolchain.toml 钉住 1.98.1，rustup 会自动安装）
+# 2. Build (rust-toolchain.toml pins 1.98.1; rustup installs it)
 RELEASE_CHANNEL=stable cargo build --release --package zed --package cli \
   --target aarch64-apple-darwin
 
-# 3. 组装 .app（复用 ZedG 98-macos-release.yml 的打包段：Info.plist = dev.zed.ZedG）
+# 3. Assemble the .app (reuse the packaging section of ZedG's 98-macos-release.yml;
+#    Info.plist = dev.zed.ZedG)
 ```
 
-验证：`cargo check -p project -p editor` 通过（1.98.1）。
+Verified with `cargo check -p project -p editor` (1.98.1).
+
+> The server name in the patch is `hover-translate-lsp`, matching the language
+> server ID in `extension.toml`. If you build ZedG against an older revision of
+> this patch that matched `zedg-translate`, re-apply this patch and rebuild.
